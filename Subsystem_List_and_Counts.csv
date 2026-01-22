@@ -1,0 +1,86 @@
+Subsystem,NumReactions
+"Alanine and aspartate metabolism",3
+"Aminosugar metabolism",15
+"Androgen and estrogen synthesis and metabolism",4
+"Arachidonic acid metabolism",8
+"Arginine and proline metabolism",16
+"Beta-Alanine metabolism",8
+"Bile acid synthesis",33
+"Butanoate metabolism",2
+"Cholesterol metabolism",160
+"Chondroitin sulfate degradation",26
+"Chondroitin synthesis",42
+"Citric acid cycle",13
+"CoA catabolism",3
+"CoA synthesis",9
+"Cytochrome metabolism",1
+"D-alanine metabolism",1
+"Drug metabolism",49
+"Eicosanoid metabolism",21
+"Exchange/demand reaction",64
+"Fatty acid oxidation",675
+"Fatty acid synthesis",213
+"Folate metabolism",40
+"Fructose and mannose metabolism",17
+"Galactose metabolism",6
+"Glutamate metabolism",7
+"Glutathione metabolism",6
+"Glycerophospholipid metabolism",49
+"Glycine, serine, alanine, and threonine metabolism",13
+"Glycolysis/gluconeogenesis",29
+"Glycosphingolipid metabolism",19
+"Glyoxylate and dicarboxylate metabolism",8
+"Heme degradation",3
+"Heme synthesis",11
+"Heparan sulfate degradation",27
+"Histidine metabolism",6
+"Inositol phosphate metabolism",36
+"Keratan sulfate degradation",18
+"Keratan sulfate synthesis",22
+"Leukotriene metabolism",6
+"Linoleate metabolism",7
+"Lysine metabolism",4
+"Methionine and cysteine metabolism",12
+"Miscellaneous",75
+"N-glycan metabolism",1
+"N-glycan synthesis",1
+"NAD metabolism",12
+"Nucleotide interconversion",117
+"Nucleotide salvage pathway",1
+"O-glycan metabolism",5
+"Oxidative phosphorylation",6
+"Pentose phosphate pathway",18
+"Peptide metabolism",3
+"Phenylalanine metabolism",9
+"Phosphatidylinositol phosphate metabolism",11
+"Propanoate metabolism",13
+"Purine catabolism",17
+"Purine synthesis",1
+"Pyrimidine catabolism",8
+"Pyrimidine synthesis",13
+"Pyruvate metabolism",19
+"R group synthesis",1
+"ROS detoxification",6
+"Sphingolipid metabolism",42
+"Squalene and cholesterol synthesis",4
+"Starch and sucrose metabolism",5
+"Steroid metabolism",8
+"Taurine and hypotaurine metabolism",6
+"Tetrahydrobiopterin metabolism",11
+"Transport, endoplasmic reticular",73
+"Transport, extracellular",681
+"Transport, golgi apparatus",35
+"Transport, lysosomal",53
+"Transport, mitochondrial",184
+"Transport, nuclear",23
+"Transport, peroxisomal",55
+"Transport,_AD2Bl",124
+"Triacylglycerol synthesis",6
+"Tryptophan metabolism",16
+"Tyrosine metabolism",42
+"Urea cycle",11
+"Valine, leucine, and isoleucine metabolism",23
+"Vitamin A metabolism",7
+"Vitamin B2 metabolism",4
+"Vitamin B6 metabolism",7
+"Vitamin C metabolism",3
