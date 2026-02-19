@@ -1,14 +1,14 @@
 %initCobraToolbox(false);
 % changeCobraSolver('gurobi','LP');
 
-%% LOAD MODELS
+%% LOADING MODELS
 model_CT = readCbModel('./Multitissue_Models/MulModel_CT.mat');
 model_PC = readCbModel('./Multitissue_Models/MulModel_PC.mat');
 
 model_CT = convert_EX_to_diet(model_CT);
 model_PC = convert_EX_to_diet(model_PC);
 
-%% LIST OF DIETS TO TEST
+%% LIST OF DIETS
 dietFiles = {
     'EU.tsv'
     'glutenFree.tsv'
@@ -26,7 +26,7 @@ if ~exist(resultsFolder,'dir')
     mkdir(resultsFolder);
 end
 
-%% LOAD ROI LIST
+%% LOADING ROI LIST
 roiTable = readtable('rois.xlsx');
 roi_list = roiTable{:,1};
 
@@ -37,7 +37,7 @@ for d = 1:length(dietFiles)
 
     dietPath = fullfile('Diets', dietFiles{d});
 
-    %% APPLY SAME DIET TO BOTH MODELS
+    %% APPLYING SAME DIET TO BOTH MODELS
     [model_CT_diet, ~, ~] = setDietBoundsFromFile(model_CT, dietPath);
     [model_PC_diet, ~, ~] = setDietBoundsFromFile(model_PC, dietPath);
 
@@ -100,16 +100,16 @@ for d = 1:length(dietFiles)
     options.targetedDietRxns = ...
         [allowedDietRxns, num2cell(ones(length(allowedDietRxns),1))];
 
-    %% RUN NUTRITION ALGORITHM
+    %% NUTRITION ALGORITHM
     [newDietModel, pointsModel, roiFlux, pointsModelSln, ...
         menuChanges] = ...
         nutritionAlgorithm_new(model_PC_diet, roi_list, options);
 
-    %% DISPLAY RESULTS
+    %% RESULTS
     fprintf('\nSuggested dietary changes:\n');
     disp(menuChanges);
 
-    %% SAVE RESULTS
+    %% RESULTS
     dietName = erase(dietFiles{d},'.tsv');
 
     save(fullfile(resultsFolder, ...
@@ -118,11 +118,9 @@ for d = 1:length(dietFiles)
         'pointsModelSln', 'menuChanges', ...
         'control_flux', 'pcos_flux');
 
-    %% SAVE MENU CHANGES AS CSV
+    %% MENU CHANGES AS CSV
     writetable(menuChanges, ...
         fullfile(resultsFolder, ...
         ['menuChanges_' dietName '.csv']));
 
 end
-
-fprintf('\nAll diets completed.\n');
