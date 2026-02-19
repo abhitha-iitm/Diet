@@ -27,7 +27,7 @@ end
 
 % prevent export via Diet_EX_ and avoid invalid ub<0 after convert
 if ~isempty(exc_rxns_idx)
-    model.ub(exc_rxns_idx) = 1000000;
+    model.ub(exc_rxns_idx) = 1000;
 end
 
 % prepare diet metabolite names (strip EX_ if present in file)
@@ -81,7 +81,7 @@ for k = 1:numel(unmatchedIdx)
     dietMet = dietMets{i};
     bloodMet = dietMet;
     rxnDietName = ['Diet_EX_' dietMet];
-    rxnExitName = ['Exit_EX_' dietMet];
+    % rxnExitName = ['Exit_EX_' dietMet];
 
     % print progress for each unmatched metabolite
     fprintf('   [%d/%d] Processing %s ... ', k, numel(unmatchedIdx), dietMet);
@@ -98,9 +98,9 @@ for k = 1:numel(unmatchedIdx)
             model.lb(idxRxn) = -(fluxValues(i)/(24*10000));
             % model.ub(idxRxn) = 0;
         end
-        if ~ismember(rxnExitName, model.rxns)
-            model = addReaction(model, rxnExitName, 'metaboliteList', {bloodMet}, 'stoichCoeffList', -1, 'lowerBound', 0, 'upperBound', 100000);
-        end
+        % if ~ismember(rxnExitName, model.rxns)
+        %     model = addReaction(model, rxnExitName, 'metaboliteList', {bloodMet}, 'stoichCoeffList', -1, 'lowerBound', 0, 'upperBound', 1000);
+        % end
         continue;
     end
 
@@ -214,13 +214,13 @@ for k = 1:numel(unmatchedIdx)
             % model.ub(idxRxn) = 0;
         end
 
-        if ~ismember(rxnExitName, model.rxns)
-            model = addReaction(model, rxnExitName, ...
-                'metaboliteList', {bloodMet}, ...
-                'stoichCoeffList', -1, ...
-                'lowerBound', 0, 'upperBound', 1000000);
-            addedExchange = addedExchange + 1;
-        end
+        % if ~ismember(rxnExitName, model.rxns)
+        %     model = addReaction(model, rxnExitName, ...
+        %         'metaboliteList', {bloodMet}, ...
+        %         'stoichCoeffList', -1, ...
+        %         'lowerBound', 0, 'upperBound', 1000);
+        %     addedExchange = addedExchange + 1;
+        % end
 
         fprintf('   Added %d transport and %d exchange reactions for %s.\n', ...
             addedTransport, addedExchange, dietMet);
@@ -228,9 +228,6 @@ for k = 1:numel(unmatchedIdx)
         fprintf('not found in any tissue or blood.\n');
         metsNotInModel{end+1} = dietMet;
     end
-
-
-
 end
 
 

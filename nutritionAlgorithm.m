@@ -1,88 +1,40 @@
 function [newDietModel,pointsModel,roiFlux,pointsModelSln,menuChanges,detailedAnalysis] = nutritionAlgorithm(model,rois,options)
-% This algorithm identifies the minimal changes to a diet necessary to get
-% a desired change in one or more reactions of interest (rois). If a 
-% metabolite is entered instead of a reaction, the algorithm will optimize 
-% the diet with a sink or demand reaction for the corresponding metabolite 
-% of interest. For a walkthrough of the algorithm, see NutritionAlgorithmWalkthrough.mlx
-% To cite the algorithm, please cite Weston and Thiele, 2022 and the COBRA
-% Toolbox as specified on opencobra.github.io/cobratoolbox/stable/cite.html
-% USAGE:
-%
-%    [newDietModel,pointsModel,roiFlux,pointsModelSln,menuChanges,detailedAnalysis] = nutritionAlgorithm(model,rois,options)
-%
-% INPUTS:
-%    model:          COBRA model structure with minimal fields:
-%                      * .S
-%                      * .c
-%                      * .ub
-%                      * .lb
-%                      * .mets  
-%                      * .rxns  
-%   rois:          cell array of all reactions of interest
-%
-% OPTIONAL INPUTS:
-%   options:  Structure containing the optional specifications:
-%   
-%       * .display: display results "off" or "on"?
-%
-%       * .roiWeights:   a vector of weights for each reaction of interest
-%       default is equal to 1
-%
-%       * .targetedDietRxns: A nx2 cell array that specifies any dietary
-%       items to target and the corresponding weight for adding the item.
-%
-%       * .foodRemovalWeighting: Determines the relationship of food
-%       removal weight with the weights specified by targetedDietRxns.
-%       The following are valid inputs for foodRemovalWeighting.
-%            - 'ones'    -> all dietary reactions from targetedDietRxns have a removal weight of one 
-%            - 'inverse' -> all dietary reactions from targetedDietRxns have a removal weight of one 
-%            - 'ditto'   -> weights are equal to that of targetedDietRxns
-%            added weights
-%            - nx2 cell array -> a customized cell array that functions like
-%            targedDietRxns but instead allows costomized weights for
-%            removing a food item rather than adding it. 
-%            - {} empty cell array -> (default) An empty array
-%            assumes all dietary reactions are available from removal with
-%            a weight of one
-%
-%       * .slnType: Specify if solution should be 'Detailed' or 'Quick'.
-%                   Default setting is 'Detailed'
-%
-%       * .roiBound: 'Unbounded' or 'Bounded'. Default is 'Bounded'.
-%
-%       * .foodAddedLimit: Specify a limit to the points produced by
-%                     adding food to the diet
-%
-%       * .foodRemovedLimit: Specify a limit to the points produced by
-%                     removing food from the diet
-%
-%       * .OFS: the Objective Flux Scalar initiates a limiting threshold
-%       for the solution's objective function performance. A OFS of 1 means
-%       that the nutrition algorithm solution will produce a result that is
-%       atleast equal to, or greater than the maximum flux of the objective
-%       reaction on the original diet
-%
-%
-% OUTPUT:
-%    newDietModel:   An copy of the input model with updated diet
-%                    reaction bounds to reflect recomended dietary changes
-%
-%   pointsModel:     The resulting model that is used to identify
-%                    recomended dietary changes. It includes points
-%                    reactions and food added/removed reactions.
-%
-%   roiFlux:         Returns the flux values for each roi in the points sln
-%
-%   pointsModelSln:  Returns the entire points solution to pointsModel
-%
-%   menuChanges:     Summarizes the recommended dietary changes
-%
-%   detailedAnalysis: Provides solutions for each simulation conducted in
-%                     the detailed analysis
-%
-% .. Authors: - Bronson R. Weston   2022
 
 
+% Determine if any rois are metabolites
+obj=model.rxns(find(model.c==1));
+if isfield(model, 'osenseStr')
+    objMinMax=model.osenseStr;
+    if strcmp(objMinMax,'min')
+        error('osensStr is set to "min". A minimized objective function is not currently supported by the nutrition algorithm. It is recomended that you flip the reaction such that products<-reactants and then set osensStr to maximize')
+    end
+else
+    error('Model fieldname "osenseStr" required to specify if the objective function is to be minimized or maximized.')
+end
+if isa(rois,'char')
+    rois={rois};
+end
+if isa(roisMinMax,'char')
+    roisMinMax={roisMinMax};
+end
+
+
+%Create a demand or sink reaction, as appropriate, for any rois that are
+%metabolites
+metRois=[];
+for i=1:length(rois)
+    if any(strcmp(model.mets,rois{i}))
+        metRois=[metRois,i];
+        if strcmp(roisMinMax{i},'max')
+            model=addDemandReaction(model,rois{i}); %adds demand reaction as 'DM_metabolite'
+            rois{i}=['DM_',rois{i}];
+            model=changeRxnBounds(model,rois{i},1000000,'u');
+        else
+            model=addSinkReactions(model,rois(i),-1000000,0);
+            rois{i}=['sink_',rois{i}];
+        end
+    end
+end
 
 % Added targetFlux optional input
 targetFlux = [];
@@ -96,10 +48,10 @@ end
 
 
 % Set weighted tissue biomass maintenance objective
-% tissueBiomassRxns = {'SK_biomass_maintenance','AD_biomass_maintenance','GN_biomass_maintenance','OO_biomass_maintenance','EN_biomass_maintenance'};
-% weights = [0.2, 0.2, 0.2, 0.2, 0.2]; % adjust as needed
-tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
-weights = [0.2, 0.1,0.1, 0.1, 0.1, 0.2, 0.1, 0.1]; 
+tissueBiomassRxns = {'SK_biomass_maintenance','AD_biomass_maintenance','GN_biomass_maintenance','OO_biomass_maintenance','EN_biomass_maintenance'};
+weights = [0.2, 0.2, 0.2, 0.2, 0.2];
+% tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
+% weights = [0.2, 0.1,0.1, 0.1, 0.1, 0.2, 0.1, 0.1]; 
 model.c(:) = 0;
 for i = 1:length(tissueBiomassRxns)
     rxnIdx = find(strcmp(model.rxns, tissueBiomassRxns{i}));
@@ -128,59 +80,50 @@ end
 
 
 
-% Ensure model identifiers are cell arrays of char
-if isfield(model,'rxns') && isstring(model.rxns), model.rxns = cellstr(model.rxns); end
-if isfield(model,'mets') && isstring(model.mets), model.mets = cellstr(model.mets); end
-% Determine per-ROI direction without requiring roisMinMax
-% When targetFlux is provided, infer direction from sign of target flux.
-% Otherwise, default to 'min' for all unless options.roiDirection is provided.
-if exist('targetFlux','var') && ~isempty(targetFlux)
-    roiDir = repmat({'min'}, 1, length(rois));
-    for ii=1:length(rois)
-        if targetFlux(ii) > 0
-            roiDir{ii} = 'max';
-        else
-            roiDir{ii} = 'min';
-        end
-    end
-else
-    if exist('options','var') && isfield(options,'roiDirection') && ~isempty(options.roiDirection)
-        roiDir = options.roiDirection;
-        if isstring(roiDir), roiDir = cellstr(roiDir); end
-        if ischar(roiDir), roiDir = repmat({roiDir},1,length(rois)); end
-        if numel(roiDir) ~= length(rois)
-            error('options.roiDirection length must match number of rois');
-        end
-    else
-        roiDir = repmat({'min'}, 1, length(rois));
-    end
-end
+% % Ensure model identifiers are cell arrays of char
+% if isfield(model,'rxns') && isstring(model.rxns), model.rxns = cellstr(model.rxns); end
+% if isfield(model,'mets') && isstring(model.mets), model.mets = cellstr(model.mets); end
+% % Determine per-ROI direction without requiring roisMinMax
+% % When targetFlux is provided, infer direction from sign of target flux.
+% % Otherwise, default to 'min' for all unless options.roiDirection is provided.
+% if exist('targetFlux','var') && ~isempty(targetFlux)
+%     roiDir = repmat({'min'}, 1, length(rois));
+%     for ii=1:length(rois)
+%         if targetFlux(ii) > 0
+%             roiDir{ii} = 'max';
+%         else
+%             roiDir{ii} = 'min';
+%         end
+%     end
+% else
+%     if exist('options','var') && isfield(options,'roiDirection') && ~isempty(options.roiDirection)
+%         roiDir = options.roiDirection;
+%         if isstring(roiDir), roiDir = cellstr(roiDir); end
+%         if ischar(roiDir), roiDir = repmat({roiDir},1,length(rois)); end
+%         if numel(roiDir) ~= length(rois)
+%             error('options.roiDirection length must match number of rois');
+%         end
+%     else
+%         roiDir = repmat({'min'}, 1, length(rois));
+%     end
+% end
 
 
-%Create a demand or sink reaction, as appropriate, for any rois that are metabolites
-metRois=[];
-for i=1:length(rois)
-    if any(strcmp(model.mets,rois{i}))
-        metRois=[metRois,i];
-        if strcmp(roiDir{i},'max')
-            model=addDemandReaction(model,rois{i}); %adds demand reaction as 'DM_metabolite'
-            rois{i}=['DM_',rois{i}];
-            model=changeRxnBounds(model,rois{i},1000000,'u');
-        else
-            model=addSinkReactions(model,rois(i),-1000000,0);
-            rois{i}=['sink_',rois{i}];
-        end
-    end
-end
-
-
-%If any reactions are targeting the exit reactions accumulation of a specific element
-%then create relative changes to the model
-for i=1:length(rois)
-    if contains(rois{i},'Exit(')
-       
-    end
-end
+% %Create a demand or sink reaction, as appropriate, for any rois that are metabolites
+% metRois=[];
+% for i=1:length(rois)
+%     if any(strcmp(model.mets,rois{i}))
+%         metRois=[metRois,i];
+%         if strcmp(roiDir{i},'max')
+%             model=addDemandReaction(model,rois{i}); %adds demand reaction as 'DM_metabolite'
+%             rois{i}=['DM_',rois{i}];
+%             model=changeRxnBounds(model,rois{i},1000000,'u');
+%         else
+%             model=addSinkReactions(model,rois(i),-1000000,0);
+%             rois{i}=['sink_',rois{i}];
+%         end
+%     end
+% end
 
 
 %initialize optional variables
@@ -188,8 +131,8 @@ roiWeights=ones(1,length(rois));
 targetedDietRxns={};
 slnType='Detailed';
 roiBound='Bounded';
-foodAddedLimit=1000000;
-foodRemovedLimit=1000000;
+foodAddedLimit=1000;
+foodRemovedLimit=1000;
 foodRemovalWeighting={};
 display='on';
 OFS=1;
@@ -279,13 +222,14 @@ if strcmp(display,'on')
     disp('_____________________________________________________')
 end
 
+
 pointsModel=model; %Copy original instance of model for points pointsModel
 
 
-% tissueBiomassRxns = {'SK_biomass_maintenance','AD_biomass_maintenance','GN_biomass_maintenance','OO_biomass_maintenance','EN_biomass_maintenance'};
-% weights = [0.2, 0.2, 0.2, 0.2, 0.2]; % adjust as needed
-tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
-weights = [0.2, 0.1,0.1, 0.1, 0.1, 0.2, 0.1, 0.1]; 
+tissueBiomassRxns = {'SK_biomass_maintenance','AD_biomass_maintenance','GN_biomass_maintenance','OO_biomass_maintenance','EN_biomass_maintenance'};
+weights = [0.2, 0.2, 0.2, 0.2, 0.2]; % adjust as needed
+% tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
+% weights = [0.2, 0.1,0.1, 0.1, 0.1, 0.2, 0.1, 0.1]; 
 model.c(:) = 0;
 for i = 1:length(tissueBiomassRxns)
     rxnIdx = find(strcmp(model.rxns, tissueBiomassRxns{i}));
@@ -318,11 +262,7 @@ if ~isempty(objIndex) && any(model.ub(objIndex) ~= model.lb(objIndex))
 
     % Print the objective reaction(s) and flux value
     disp(['Initial objective function flux (', strjoin(model.rxns(objIndex), ', '), ') = ', num2str(f1)]);
-    % List of reactions whose fluxes you want
-% biomassRxns = {'SK_PGESr', ...
-%                'GN_PGSr', 'GN_HMR_2581', 'OO_HMR_0987', ...
-%                'OO_LTC4CP', 'GN_RE1796R', 'EN_HAS2', ...
-%                'AD_ARGSL', 'AD_SPHK11'};
+
 roiTable = readtable('rois.xlsx');   % <-- your file name
 biomassRxns = roiTable{:,1};
 
@@ -352,10 +292,10 @@ end
         pointsModel = changeRxnBounds(pointsModel, model.rxns(objIndex), f1, 'l');
 
         % --- Step 2: Constrain each tissue biomass reaction to at least control flux ---
-        % tissueBiomassRxns = {'SK_biomass_maintenance', 'AD_biomass_maintenance', ...
-        %                      'GN_biomass_maintenance', 'OO_biomass_maintenance', ...
-        %                      'EN_biomass_maintenance'};
-        tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
+        tissueBiomassRxns = {'SK_biomass_maintenance', 'AD_biomass_maintenance', ...
+                             'GN_biomass_maintenance', 'OO_biomass_maintenance', ...
+                             'EN_biomass_maintenance'};
+        % tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC','AD_biomass_maintenance','GN_biomass_maintenance','GN_P450SCC1m','OO_biomass_maintenance','EN_biomass_maintenance','EN_biomass_reaction'};
         % Use same total flux (not divided)
         target_each = 0.01;
 
@@ -381,15 +321,15 @@ else
 end
 
 % --- Display final objective in pointsModel ---
-% objIdx_points = find(pointsModel.c ~= 0);
-% if isempty(objIdx_points)
-%     disp('⚠️ No objective function is currently set in pointsModel.');
-% else
-%     disp('🎯 Objective function reaction(s) in pointsModel:');
-%     disp(pointsModel.rxns(objIdx_points));
-%     disp('Corresponding coefficients:');
-%     disp(pointsModel.c(objIdx_points));
-% end
+objIdx_points = find(pointsModel.c ~= 0);
+if isempty(objIdx_points)
+    disp('No objective function is currently set in pointsModel.');
+else
+    disp('Objective function reaction(s) in pointsModel:');
+    disp(pointsModel.rxns(objIdx_points));
+    disp('Corresponding coefficients:');
+    disp(pointsModel.c(objIdx_points));
+end
 
 
 
@@ -745,58 +685,6 @@ end
 weightVector = ones(1, length(rois));
 disp(weightVector);
 
-% % For standard (non-PCOS) ROI min/max logic, keep the original
-% if isempty(targetFlux)
-%     for ii=1:length(roiIndexP)
-%         if strcmp(roiDir{ii},'max')
-%             weightVector(ii) = -1;
-%         else
-%             weightVector(ii) = 1;
-%         end
-%     end
-% end
-
-% metsStoich = [metsStoich; weightVector .* roiWeights; zeros(1,length(roiIndexP))];
-
-% for i=1:length(rois)
-%     evalc('[pointsModel,~,~]= removeRxns(pointsModel, {char(rois{i})})');
-% end
-
-% pointsModel = addMultipleReactions(pointsModel, [rois,'Point_EX_roiPoints[roiP]_[P]'], [metsRoi,'roiPoint[roiP]','point[P]'], [metsStoich,[zeros(length(metsStoich(:,1))-2,1);-1;1]], 'lb', [roiLB.',-1000000], 'ub', [roiUB.',1000000]);
-% disp(rois);
-
-% --- Step 1: Remove old ROI reactions ---
-% for i = 1:length(rois)
-%     evalc('[pointsModel,~,~] = removeRxns(pointsModel, {char(rois{i})})');
-% end
-
-% % --- Step 2: Create intermediate reactions ROI -> roiPoint[roiP] ---
-% % Each ROI contributes to the intermediate metabolite 'roiPoint[roiP]'
-% for i = 1:length(rois)
-%     % stoichiometry for this ROI feeding roiPoint
-%     roiStoich = [zeros(length(metsRoi),1); weightVector(i)*roiWeights(i); 0]; 
-%     % add reaction: ROI -> roiPoint
-%     pointsModel = addMultipleReactions(pointsModel, rois(i), [metsRoi, 'roiPoint[roiP]', 'point[P]'], roiStoich, 'lb', roiLB(i), 'ub', roiUB(i));
-% end
-
-% % --- Step 3: Add single summing reaction roiPoint[roiP] -> point[P] ---
-% pointsModel = addMultipleReactions(pointsModel, {'Point_EX_roiPoints[roiP]_[P]'}, {'roiPoint[roiP]', 'point[P]'}, [-1; 1], 'lb', -1000000, 'ub', 1000000);
-% disp(rois);
-
-% metsCombined = [metsRoi, 'roiPoint[roiP]', 'point[P]'];
-% nROI = length(rois);
-
-% roiStoichMatrix = zeros(length(metsCombined), nROI);
-% for i = 1:nROI
-%     roiStoichMatrix(length(metsRoi)+1, i) = weightVector(i) * roiWeights(i);
-%     roiStoichMatrix(length(metsCombined), i) = 0;
-% end
-
-% pointsModel = addMultipleReactions(pointsModel, rois, metsCombined, roiStoichMatrix,...
-%     'lb', roiLB, 'ub', roiUB);
-
-% pointsModel = addMultipleReactions(pointsModel, {'Point_EX_roiPoints[roiP]_[P]'},...
-%     {'roiPoint[roiP]', 'point[P]'}, [-1; 1], 'lb', -1000000, 'ub', 1000000);
 
 metsCombined = [metsRoi, {'roiPoint[roiP]'}, {'point[P]'}]; % must be cell array for concatenation
 nROI = length(rois);
@@ -1068,5 +956,40 @@ newDietModel.osenseStr = objMinMax;
 if strcmp(display,'on')
     disp('_____________________________________________________')
 end
+
+% ==========================================
+% CLEAN newDietModel: KEEP base, REMOVE dev, RESTORE names
+% ==========================================
+
+rxnsToRemove = {};
+
+% Remove ONLY deviation reactions (NOT base)
+rxnsToRemove = [rxnsToRemove; newDietModel.rxns(contains(newDietModel.rxns, '_dev_pos'))];
+rxnsToRemove = [rxnsToRemove; newDietModel.rxns(contains(newDietModel.rxns, '_dev_neg'))];
+
+% Remove points & food optimization reactions
+rxnsToRemove = [rxnsToRemove; newDietModel.rxns(contains(newDietModel.rxns, 'Point_EX_'))];
+rxnsToRemove = [rxnsToRemove; newDietModel.rxns(contains(newDietModel.rxns, 'Food_Added_EX_'))];
+rxnsToRemove = [rxnsToRemove; newDietModel.rxns(contains(newDietModel.rxns, 'Food_Removed_EX_'))];
+
+rxnsToRemove = unique(rxnsToRemove);
+
+% Remove helper reactions
+if ~isempty(rxnsToRemove)
+    evalc('[newDietModel,~,~] = removeRxns(newDietModel, rxnsToRemove);');
+end
+
+% Rename _base reactions back to original names
+baseRxns = newDietModel.rxns(contains(newDietModel.rxns, '_base'));
+
+for i = 1:length(baseRxns)
+    oldName = baseRxns{i};
+    newName = erase(oldName, '_base');
+    newDietModel.rxns(strcmp(newDietModel.rxns, oldName)) = {newName};
+end
+
+disp(['Removed ', num2str(length(rxnsToRemove)), ' helper reactions']);
+disp(['Restored ', num2str(length(baseRxns)), ' base reactions to original names']);
+
 
 end

@@ -117,3 +117,88 @@ T = table(importantReactions, ess_imp, flux_imp, importanceScore, ...
 
 writetable(T, 'FattyAcid_KeyReactions.csv');
 fprintf('\nSaved detailed results to FattyAcid_KeyReactions.csv\n');
+
+%%
+resultsFolder = 'results-sameDiets';   % your folder
+excelFile = fullfile(resultsFolder,'All_Menu_Changes.xlsx');
+
+% remove old excel if it exists
+if exist(excelFile,'file')
+    delete(excelFile)
+end
+
+files = dir(fullfile(resultsFolder,'menuChanges_*.csv'));
+
+for k = 1:length(files)
+
+    % read menu changes table
+    T = readtable(fullfile(resultsFolder, files(k).name));
+
+    if isempty(T)
+        continue
+    end
+
+    % extract diet name
+    dietName = erase(files(k).name,'menuChanges_');
+    dietName = erase(dietName,'.csv');
+
+    % Excel sheet name must be valid
+    sheetName = dietName(1:min(31,end));
+    sheetName = regexprep(sheetName,'[\\/*?:\[\]]','_');
+
+    % write to excel sheet
+    writetable(T, excelFile, ...
+        'Sheet', sheetName, ...
+        'WriteMode','overwritesheet');
+
+    fprintf('Added sheet: %s\n', sheetName);
+end
+
+disp('Excel file with all menu changes created!');
+%%
+resultsFolder = 'results-sameDiets';
+excelFile = fullfile(resultsFolder,'All_Menu_Changes.xlsx');
+
+% get sheet names
+[~, sheetNames] = xlsfinfo(excelFile);
+
+for s = 1:length(sheetNames)
+
+    sheet = sheetNames{s};
+
+    % read existing sheet
+    T = readtable(excelFile, 'Sheet', sheet);
+
+    % skip if column already exists
+    if ismember('Metabolite', T.Properties.VariableNames)
+        continue
+    end
+
+    % extract metabolite IDs
+    mets = regexprep(T.FoodRxn,'Food_Added_EX_|Food_Removed_EX_','');
+
+    % map to metabolite names using model
+    [found, idx] = ismember(mets, newDietModel.mets);
+
+    metNames = mets;   % fallback
+    metNames(found) = newDietModel.metNames(idx(found));
+
+    % add new column
+    T.Metabolite = metNames;
+
+    % move next to FoodRxn column
+    T = movevars(T,'Metabolite','After','FoodRxn');
+
+    % overwrite sheet with updated table
+    writetable(T, excelFile, ...
+        'Sheet', sheet, ...
+        'WriteMode','overwritesheet');
+
+    fprintf('Updated sheet: %s\n', sheet);
+end
+
+disp('✅ Metabolite column added to all sheets');
+
+
+
+
