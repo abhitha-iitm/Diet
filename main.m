@@ -1,5 +1,5 @@
-%initCobraToolbox(false);
-% changeCobraSolver('gurobi','LP');
+initCobraToolbox(false);
+changeCobraSolver('gurobi','LP');
 
 %% LOADING MODELS
 model_CT = readCbModel('./Multitissue_Models/MulModel_CT.mat');
@@ -10,18 +10,19 @@ model_PC = convert_EX_to_diet(model_PC);
 
 %% LIST OF DIETS
 dietFiles = {
-    'EU.tsv'
-    'glutenFree.tsv'
-    'highprotein.tsv'
-    'type2diabetes.tsv'
+    %'EU.tsv'
+    %'glutenFree.tsv'
+    %'highprotein.tsv'
+    %'type2diabetes.tsv'
     'mediterranean.tsv'
-    'highfiber.tsv'
-    'unhealthy.tsv'
-    'vegan.tsv'
-    'vegetarian.tsv'
-};
+    %'highfiber.tsv'
+    %'unhealthy.tsv'
+    %'vegan.tsv'
+    %'vegetarian.tsv'
+    };
 
-resultsFolder = 'results-sameDiets';
+% [model_CT_diet, ~, ~] = setDietBoundsFromFile(model_CT, fullfile('Diets',dietFiles{1}));
+resultsFolder = 'results-new-objectives';
 if ~exist(resultsFolder,'dir')
     mkdir(resultsFolder);
 end
@@ -42,15 +43,68 @@ for d = 1:length(dietFiles)
     [model_PC_diet, ~, ~] = setDietBoundsFromFile(model_PC, dietPath);
 
     %% SET WEIGHTED BIOMASS OBJECTIVE
+    % tissueBiomassRxns = {
+    %     'SK_biomass_maintenance'
+    %     'AD_biomass_maintenance'
+    %     'GN_biomass_maintenance'
+    %     'OO_biomass_maintenance'
+    %     'EN_biomass_maintenance'
+    %     };
+    % weights = [0.2 0.2 0.2 0.2 0.2];
+    % tissueBiomassRxns = {'SK_ATPtm','AD_ACCOAC',...
+    %                  'GN_biomass_maintenance','GN_P450SCC1m',...
+    %                  'OO_ATPtm','EN_SERPT','EN_SMS'};
+
+    % weights=[0.2,0.2,0.1,0.1,0.2,0.1,0.1];
+
+    % tissueBiomassRxns = { ...
+    %     'SK_ATPtm', ...
+    %     'SK_biomass_maintenance', ...
+    %     'AD_ACCOAC', ...
+    %     'AD_biomass_maintenance', ...
+    %     'GN_biomass_maintenance', ...
+    %     'GN_P450SCC1m', ...
+    %     'OO_ATPtm', ...
+    %     'OO_biomass_maintenance', ...
+    %     'EN_biomass_maintenance', ...
+    %     'EN_SERPT', ...
+    %     'EN_SMS' ...
+    %     };
+
+    % weights=[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.0666,0.0667,0.0667];
+
     tissueBiomassRxns = {
+        'SK_ATPtm'
+        'SK_FAOXC204'
+        'AD_ACCOAC'
         'SK_biomass_maintenance'
         'AD_biomass_maintenance'
-        'GN_biomass_maintenance'
-        'OO_biomass_maintenance'
-        'EN_biomass_maintenance'
-    };
 
-    weights = [0.2 0.2 0.2 0.2 0.2];
+        'GN_P450SCC1m'
+        'GN_biomass_maintenance'
+        'OO_ATPtm'
+        'OO_biomass_maintenance'
+        'EN_SERPT'
+        'EN_SMS'
+        'EN_biomass_maintenance'
+        };
+
+    weights = [
+        0.12
+        0.12
+        0.12
+        0.12
+        0.01
+        0.01
+
+        0.1175
+        0.01
+        0.1175
+        0.01
+        0.1175
+        0.1175
+        0.01
+        ];
 
     model_CT_diet.c(:) = 0;
     model_PC_diet.c(:) = 0;

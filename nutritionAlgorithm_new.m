@@ -136,8 +136,8 @@ roiWeights=ones(1,length(rois));
 targetedDietRxns={};
 slnType='Detailed';
 roiBound='Bounded';
-foodAddedLimit=1000;
-foodRemovedLimit=1000;
+foodAddedLimit=1; %change made
+foodRemovedLimit=1; %change made
 foodRemovalWeighting={};
 display='on';
 OFS=1;
@@ -597,27 +597,68 @@ if strcmp(display,'on')
     menuChanges
 end
 
+% %Add and remove relevant food items from diet in newDietModel
+% foodItemsAdd= regexprep(pointsModel.rxns(slnIndexes1),'Food_Added_EX_','Diet_EX_');
+% foodItemsRemove= regexprep(pointsModel.rxns(slnIndexes2),'Food_Removed_EX_','Diet_EX_');
+% modelOindexAdd=zeros(1,length(foodItemsAdd));
+% sl2IndexAdd=zeros(1,length(foodItemsAdd));
+% modelOindexRemove=zeros(1,length(foodItemsRemove));
+% sl2IndexRemove=zeros(1,length(foodItemsRemove));
+% for i=1:length(foodItemsAdd)
+%     modelOindexAdd(i)=find(strcmp(newDietModel.rxns,foodItemsAdd(i)));
+%     sl2IndexAdd(i)=find(strcmp(pointsModel.rxns,foodItemsAdd(i)));
+% end
+% for i=1:length(foodItemsRemove)
+%     modelOindexRemove(i)=find(strcmp(newDietModel.rxns,foodItemsRemove(i)));
+%     sl2IndexRemove(i)=find(strcmp(pointsModel.rxns,foodItemsRemove(i)));
+% end
+% % newDietModel.lb(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1))*1.01;
+% newDietModel.lb(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1));
+% newDietModel.ub(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1));
+% % newDietModel.lb(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2))*1.01;
+% newDietModel.lb(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2));
+% newDietModel.ub(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2));
+
 %Add and remove relevant food items from diet in newDietModel
-foodItemsAdd= regexprep(pointsModel.rxns(slnIndexes1),'Food_Added_EX_','Diet_EX_');
-foodItemsRemove= regexprep(pointsModel.rxns(slnIndexes2),'Food_Removed_EX_','Diet_EX_');
-modelOindexAdd=zeros(1,length(foodItemsAdd));
-sl2IndexAdd=zeros(1,length(foodItemsAdd));
-modelOindexRemove=zeros(1,length(foodItemsRemove));
-sl2IndexRemove=zeros(1,length(foodItemsRemove));
-for i=1:length(foodItemsAdd)
-    modelOindexAdd(i)=find(strcmp(newDietModel.rxns,foodItemsAdd(i)));
-    sl2IndexAdd(i)=find(strcmp(pointsModel.rxns,foodItemsAdd(i)));
+foodItemsAdd = regexprep(pointsModel.rxns(slnIndexes1),'Food_Added_EX_','Diet_EX_');
+foodItemsRemove = regexprep(pointsModel.rxns(slnIndexes2),'Food_Removed_EX_','Diet_EX_');
+
+% Combine all affected diet reactions
+allFoodRxns = unique([foodItemsAdd; foodItemsRemove]);
+
+for i = 1:length(allFoodRxns)
+
+    rxn = allFoodRxns{i};
+
+    % find reaction in new diet model
+    idxNew = find(strcmp(newDietModel.rxns, rxn));
+
+    % find reaction in points model
+    idxOld = find(strcmp(pointsModel.rxns, rxn));
+    oldFlux = pointsModelSln.v(idxOld);
+
+    % added flux
+    addFlux = 0;
+    addIdx = find(strcmp(foodItemsAdd, rxn));
+    if ~isempty(addIdx)
+        addFlux = pointsModelSln.v(slnIndexes1(addIdx));
+    end
+
+    % removed flux
+    remFlux = 0;
+    remIdx = find(strcmp(foodItemsRemove, rxn));
+    if ~isempty(remIdx)
+        remFlux = pointsModelSln.v(slnIndexes2(remIdx));
+    end
+
+    % net diet change
+    newFlux = oldFlux + addFlux - remFlux;
+
+    % update bounds
+    newDietModel.lb(idxNew) = newFlux;
+    newDietModel.ub(idxNew) = newFlux;
+
 end
-for i=1:length(foodItemsRemove)
-    modelOindexRemove(i)=find(strcmp(newDietModel.rxns,foodItemsRemove(i)));
-    sl2IndexRemove(i)=find(strcmp(pointsModel.rxns,foodItemsRemove(i)));
-end
-% newDietModel.lb(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1))*1.01;
-newDietModel.lb(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1));
-newDietModel.ub(modelOindexAdd)=(pointsModelSln.v(sl2IndexAdd)+pointsModelSln.v(slnIndexes1));
-% newDietModel.lb(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2))*1.01;
-newDietModel.lb(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2));
-newDietModel.ub(modelOindexRemove)=(pointsModelSln.v(sl2IndexRemove)-pointsModelSln.v(slnIndexes2));
 
 if strcmp(display,'on')
     disp('Points Simulation Solution:')
