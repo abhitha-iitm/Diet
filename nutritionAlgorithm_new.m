@@ -136,8 +136,8 @@ roiWeights=ones(1,length(rois));
 targetedDietRxns={};
 slnType='Detailed';
 roiBound='Bounded';
-foodAddedLimit=1; %change made
-foodRemovedLimit=1; %change made
+foodAddedLimit=100; %change made
+foodRemovedLimit=1000; %change made
 foodRemovalWeighting={};
 display='on';
 OFS=1;
@@ -253,6 +253,134 @@ for i = 1:nPrint
 
 end
 
+% if ~isempty(targetFlux)
+
+%     newRois    = {};
+%     newWeights = [];
+
+%     for i = 1:length(rois)
+
+%         roiName = char(rois{i});
+%         tgt     = targetFlux(i);
+%         pcos    = options.pcosFlux(i);
+%         delta   = pcos - tgt;
+
+%         % POINTS MODEL DECOMPOSITION
+
+%         rxnIdxP = find(strcmp(pointsModel.rxns, roiName), 1);
+%         if isempty(rxnIdxP)
+%             error(['ROI reaction not found: ', roiName]);
+%         end
+
+%         stoichP   = full(pointsModel.S(:, rxnIdxP));
+%         metsMaskP = (stoichP ~= 0);
+%         metsListP = pointsModel.mets(metsMaskP)';
+%         coeffP    = stoichP(metsMaskP);
+
+%         % Remove original reaction
+%         evalc('[pointsModel,~,~] = removeRxns(pointsModel, {roiName});');
+
+%         baseP = [roiName '_base'];
+%         dposP = [roiName '_dev_pos'];
+%         dnegP = [roiName '_dev_neg'];
+
+%         SnewP = zeros(numel(metsListP),3);
+%         SnewP(:,1) = coeffP;
+%         SnewP(:,2) = coeffP;
+%         SnewP(:,3) = -coeffP;
+
+%         % Deviation bounds
+%         if delta > 0
+%             devPosLB = 0;
+%             devPosUB = delta;
+%             devNegLB = 0;
+%             devNegUB = 0;
+%         elseif delta < 0
+%             devPosLB = 0;
+%             devPosUB = 0;
+%             devNegLB = 0;
+%             devNegUB = abs(delta);
+%         else
+%             devPosLB = 0;
+%             devPosUB = 0;
+%             devNegLB = 0;
+%             devNegUB = 0;
+%         end
+
+%         pointsModel = addMultipleReactions(pointsModel, ...
+%             {baseP, dposP, dnegP}, ...
+%             metsListP, ...
+%             SnewP, ...
+%             'lb', [tgt, devPosLB, devNegLB], ...
+%             'ub', [tgt, devPosUB, devNegUB]);
+
+
+%         % base + dev_pos - dev_neg = PCOS flux
+
+%         linkMet = [roiName '_pcos_balance'];
+
+%         pointsModel = addMetabolite(pointsModel, linkMet);
+
+%         linkIdx = strcmp(pointsModel.mets, linkMet);
+
+%         % base produces link metabolite
+%         pointsModel.S(linkIdx, strcmp(pointsModel.rxns, baseP)) = 1;
+
+%         % dev_pos produces link metabolite
+%         pointsModel.S(linkIdx, strcmp(pointsModel.rxns, dposP)) = 1;
+
+%         % dev_neg consumes link metabolite
+%         pointsModel.S(linkIdx, strcmp(pointsModel.rxns, dnegP)) = -1;
+
+%         % fixed PCOS demand
+%         pointsModel = addReaction(pointsModel, ...
+%             [roiName '_PCOS_total'], ...
+%             {linkMet}, ...
+%             -1, ...
+%             false, ...
+%             pcos, ...
+%             pcos);
+
+%         % Store dev reactions for ROI penalty
+%         newRois{end+1} = dposP;
+%         newRois{end+1} = dnegP;
+
+%         if exist('roiWeights','var') && length(roiWeights) >= i
+%             newWeights = [newWeights, roiWeights(i), roiWeights(i)];
+%         else
+%             newWeights = [newWeights, 1, 1];
+%         end
+
+%     end
+
+%     rois       = newRois;
+%     roiWeights = newWeights;
+
+%     % ROI PENALTY SYSTEM
+
+%     roiPointIdx = find(strcmp(pointsModel.mets,'roiPoint[roiP]'));
+
+%     for i = 1:length(rois)
+%         devIdx = find(strcmp(pointsModel.rxns, rois{i}));
+%         if ~isempty(devIdx)
+%             pointsModel.S(roiPointIdx, devIdx) = roiWeights(i);
+%         end
+%     end
+
+%     % Pool ROI points into global point[P]
+%     pointsModel = addReaction(pointsModel,...
+%         'Point_EX_roiPoints[roiP]_[P]',...
+%         {'roiPoint[roiP]','point[P]'},...
+%         [-1 1],...
+%         true,...
+%         -1000000,...
+%         1000000);
+
+% end
+
+origRois = rois;
+
+
 if ~isempty(targetFlux)
 
     newRois    = {};
@@ -262,86 +390,56 @@ if ~isempty(targetFlux)
 
         roiName = char(rois{i});
         tgt     = targetFlux(i);
-        pcos    = options.pcosFlux(i);
-        delta   = pcos - tgt;
 
-        % POINTS MODEL DECOMPOSITION
-
-        rxnIdxP = find(strcmp(pointsModel.rxns, roiName), 1);
-        if isempty(rxnIdxP)
+        % Find ROI reaction index (this is v_new_ROI)
+        idx_roi = find(strcmp(pointsModel.rxns, roiName), 1);
+        if isempty(idx_roi)
             error(['ROI reaction not found: ', roiName]);
         end
 
-        stoichP   = full(pointsModel.S(:, rxnIdxP));
-        metsMaskP = (stoichP ~= 0);
-        metsListP = pointsModel.mets(metsMaskP)';
-        coeffP    = stoichP(metsMaskP);
-
-        % Remove original reaction
-        evalc('[pointsModel,~,~] = removeRxns(pointsModel, {roiName});');
-
-        baseP = [roiName '_base'];
+        % 🔴 ADD deviation variables
         dposP = [roiName '_dev_pos'];
         dnegP = [roiName '_dev_neg'];
 
-        SnewP = zeros(numel(metsListP),3);
-        SnewP(:,1) = coeffP;
-        SnewP(:,2) = coeffP;
-        SnewP(:,3) = -coeffP;
+        % create dummy metabolite for deviation variables
+        dummyMet = 'dev_dummy[c]';
 
-        % Deviation bounds
-        if delta > 0
-            devPosLB = 0;
-            devPosUB = delta;
-            devNegLB = 0;
-            devNegUB = 0;
-        elseif delta < 0
-            devPosLB = 0;
-            devPosUB = 0;
-            devNegLB = 0;
-            devNegUB = abs(delta);
-        else
-            devPosLB = 0;
-            devPosUB = 0;
-            devNegLB = 0;
-            devNegUB = 0;
+        if ~ismember(dummyMet, pointsModel.mets)
+            pointsModel = addMetabolite(pointsModel, dummyMet);
         end
 
-        pointsModel = addMultipleReactions(pointsModel, ...
-            {baseP, dposP, dnegP}, ...
-            metsListP, ...
-            SnewP, ...
-            'lb', [tgt, devPosLB, devNegLB], ...
-            'ub', [tgt, devPosUB, devNegUB]);
+        pointsModel = addReaction(pointsModel, dposP, {dummyMet}, 0, false, 0, 1000);
+        pointsModel = addReaction(pointsModel, dnegP, {dummyMet}, 0, false, 0, 1000);
+
+        % Get indices AFTER adding
+        idx_pos = find(strcmp(pointsModel.rxns, dposP));
+        idx_neg = find(strcmp(pointsModel.rxns, dnegP));
+
+        % 🔴 ADD CONSTRAINT:
+        % v_new_ROI − target = dev_pos − dev_neg
+        newRow = zeros(1, length(pointsModel.rxns));
+
+        newRow(idx_roi) = 1;
+        newRow(idx_pos) = -1;
+        newRow(idx_neg) = 1;
+
+        % 🔴 ADD NEW METABOLITE FOR CONSTRAINT
+        metName = [roiName '_dev_constraint'];
+
+        pointsModel = addMetabolite(pointsModel, metName);
+
+        metIdx = find(strcmp(pointsModel.mets, metName));
+
+        % 🔴 APPLY CONSTRAINT
+        pointsModel.S(metIdx, idx_roi) = 1;
+        pointsModel.S(metIdx, idx_pos) = -1;
+        pointsModel.S(metIdx, idx_neg) = 1;
+
+        pointsModel.b(metIdx) = tgt;
+        pointsModel.csense(metIdx) = 'E';
 
 
-        % base + dev_pos - dev_neg = PCOS flux
-
-        linkMet = [roiName '_pcos_balance'];
-
-        pointsModel = addMetabolite(pointsModel, linkMet);
-
-        linkIdx = strcmp(pointsModel.mets, linkMet);
-
-        % base produces link metabolite
-        pointsModel.S(linkIdx, strcmp(pointsModel.rxns, baseP)) = 1;
-
-        % dev_pos produces link metabolite
-        pointsModel.S(linkIdx, strcmp(pointsModel.rxns, dposP)) = 1;
-
-        % dev_neg consumes link metabolite
-        pointsModel.S(linkIdx, strcmp(pointsModel.rxns, dnegP)) = -1;
-
-        % fixed PCOS demand
-        pointsModel = addReaction(pointsModel, ...
-            [roiName '_PCOS_total'], ...
-            {linkMet}, ...
-            -1, ...
-            false, ...
-            pcos, ...
-            pcos);
-
-        % Store dev reactions for ROI penalty
+        % 🔴 Store deviation reactions for penalty
         newRois{end+1} = dposP;
         newRois{end+1} = dnegP;
 
@@ -356,8 +454,7 @@ if ~isempty(targetFlux)
     rois       = newRois;
     roiWeights = newWeights;
 
-    % ROI PENALTY SYSTEM
-
+    % 🔴 ROI PENALTY SYSTEM
     roiPointIdx = find(strcmp(pointsModel.mets,'roiPoint[roiP]'));
 
     for i = 1:length(rois)
@@ -367,7 +464,7 @@ if ~isempty(targetFlux)
         end
     end
 
-    % Pool ROI points into global point[P]
+    % 🔴 Pool ROI points
     pointsModel = addReaction(pointsModel,...
         'Point_EX_roiPoints[roiP]_[P]',...
         {'roiPoint[roiP]','point[P]'},...
@@ -377,6 +474,11 @@ if ~isempty(targetFlux)
         1000000);
 
 end
+
+
+
+
+
 
 
 %add all diet exchange reactions to targetedDietRxns
@@ -441,6 +543,11 @@ pointsModel = addMultipleReactions(pointsModel, foodRxns, Mets, sMatrix, 'lb', -
 pointsModel = addMultipleReactions(pointsModel, {'Point_EX_unitOfFoodRemoved2Change[dp]','Point_EX_unitOfFoodAdded2Change[dp]','Point_EX_unitOfFoodChange[dP]_[P]','Point_EX_Point[P]'}, {'unitOfFoodRemoved[dP]','unitOfFoodAdded[dP]','unitOfFoodChange[dP]','point[P]'}, [-1 0 0 0;0 -1 0 0;1 1 -1 0;0 0 1 -1], 'lb', [-1000000,-1000000, -1000000,-1000000], 'ub', [foodRemovedLimit,foodAddedLimit,1000000,1000000]);
 
 
+% 🔴 NEW: limit each food individually (PREVENT DOMINANCE)
+ub_individual = 2;   % try 2–5 range
+
+pointsModel = changeRxnBounds(pointsModel, foodRxns, -ub_individual, 'l');
+
 %Add "Food Removed" reactions to points model
 [~,ai,bi]=intersect(pointsModel.rxns,foodRemovalWeighting(:,1));
 bi=bi(pointsModel.lb(ai)<0); % only includes removal reactions for dietary reactions that have a non-zero influx
@@ -473,15 +580,29 @@ fprintf('Food_Removed reactions present: %d/%d\n', sum(foodRemovedPresent), leng
 
 
 %Find solution
-devIdx  = find(strcmp(pointsModel.rxns,'Point_EX_roiPoints[roiP]_[P]'));
-foodIdx = find(strcmp(pointsModel.rxns,'Point_EX_unitOfFoodChange[dP]_[P]'));
+% devIdx  = find(strcmp(pointsModel.rxns,'Point_EX_roiPoints[roiP]_[P]'));
+% foodIdx = find(strcmp(pointsModel.rxns,'Point_EX_unitOfFoodChange[dP]_[P]'));
 
-Wdev  = 1;
-Wfood = 0;
+ Wdev  = 1;
+ Wfood = 0;
+
+% pointsModel.c(:) = 0;
+% pointsModel.c(devIdx)  = Wdev;
+% pointsModel.c(foodIdx) = Wfood;
+% pointsModel.osenseStr = 'min';
 
 pointsModel.c(:) = 0;
-pointsModel.c(devIdx)  = Wdev;
+
+% 🔴 MINIMIZE ACTUAL DEVIATION VARIABLES
+for i = 1:length(rois)
+    idx = find(strcmp(pointsModel.rxns, rois{i}));
+    pointsModel.c(idx) = Wdev;
+end
+
+% small food penalty (optional but fine)
+foodIdx = find(strcmp(pointsModel.rxns,'Point_EX_unitOfFoodChange[dP]_[P]'));
 pointsModel.c(foodIdx) = Wfood;
+
 pointsModel.osenseStr = 'min';
 
 pointsModelSln = optimizeCbModel(pointsModel);
@@ -490,50 +611,54 @@ fprintf('\n================ DEBUG START ================\n');
 
 fprintf('\n--- REACTION EXISTENCE CHECK ---\n');
 
-baseIdx = find(strcmp(pointsModel.rxns, baseP));
-dposIdx = find(strcmp(pointsModel.rxns, dposP));
-dnegIdx = find(strcmp(pointsModel.rxns, dnegP));
+% baseIdx = find(strcmp(pointsModel.rxns, baseP));
+% dposIdx = find(strcmp(pointsModel.rxns, dposP));
+% dnegIdx = find(strcmp(pointsModel.rxns, dnegP));
 
-fprintf('Base reaction index : %s\n', mat2str(baseIdx));
-fprintf('Dev+ reaction index : %s\n', mat2str(dposIdx));
-fprintf('Dev- reaction index : %s\n', mat2str(dnegIdx));
+% fprintf('Base reaction index : %s\n', mat2str(baseIdx));
+% fprintf('Dev+ reaction index : %s\n', mat2str(dposIdx));
+% fprintf('Dev- reaction index : %s\n', mat2str(dnegIdx));
 
-fprintf('\n--- DUPLICATE CHECK ---\n');
-fprintf('Number of base reactions : %d\n', length(baseIdx));
-fprintf('Number of dev+ reactions : %d\n', length(dposIdx));
-fprintf('Number of dev- reactions : %d\n', length(dnegIdx));
+% fprintf('\n--- ROI DEV CHECK ---\n');
+% fprintf('Dev+ flux : %f\n', testSol.v(idx_pos));
+% fprintf('Dev- flux : %f\n', testSol.v(idx_neg));
 
-fprintf('\n--- BOUNDS CHECK ---\n');
-if ~isempty(baseIdx)
-    fprintf('Base LB : %s\n', mat2str(pointsModel.lb(baseIdx)));
-    fprintf('Base UB : %s\n', mat2str(pointsModel.ub(baseIdx)));
-end
+% fprintf('\n--- DUPLICATE CHECK ---\n');
+% fprintf('Number of base reactions : %d\n', length(baseIdx));
+% fprintf('Number of dev+ reactions : %d\n', length(dposIdx));
+% fprintf('Number of dev- reactions : %d\n', length(dnegIdx));
 
-if ~isempty(dposIdx)
-    fprintf('Dev+ LB : %s\n', mat2str(pointsModel.lb(dposIdx)));
-    fprintf('Dev+ UB : %s\n', mat2str(pointsModel.ub(dposIdx)));
-end
+% fprintf('\n--- BOUNDS CHECK ---\n');
+% if ~isempty(baseIdx)
+%     fprintf('Base LB : %s\n', mat2str(pointsModel.lb(baseIdx)));
+%     fprintf('Base UB : %s\n', mat2str(pointsModel.ub(baseIdx)));
+% end
 
-if ~isempty(dnegIdx)
-    fprintf('Dev- LB : %s\n', mat2str(pointsModel.lb(dnegIdx)));
-    fprintf('Dev- UB : %s\n', mat2str(pointsModel.ub(dnegIdx)));
-end
+% if ~isempty(dposIdx)
+%     fprintf('Dev+ LB : %s\n', mat2str(pointsModel.lb(dposIdx)));
+%     fprintf('Dev+ UB : %s\n', mat2str(pointsModel.ub(dposIdx)));
+% end
 
-fprintf('\n--- STOICHIOMETRY CHECK ---\n');
-if ~isempty(baseIdx)
-    sto = full(pointsModel.S(:, baseIdx(1)));
-    fprintf('Base stoich nonzero count : %d\n', sum(sto~=0));
-end
+% if ~isempty(dnegIdx)
+%     fprintf('Dev- LB : %s\n', mat2str(pointsModel.lb(dnegIdx)));
+%     fprintf('Dev- UB : %s\n', mat2str(pointsModel.ub(dnegIdx)));
+% end
 
-if ~isempty(dposIdx)
-    sto = full(pointsModel.S(:, dposIdx(1)));
-    fprintf('Dev+ stoich nonzero count : %d\n', sum(sto~=0));
-end
+% fprintf('\n--- STOICHIOMETRY CHECK ---\n');
+% if ~isempty(baseIdx)
+%     sto = full(pointsModel.S(:, baseIdx(1)));
+%     fprintf('Base stoich nonzero count : %d\n', sum(sto~=0));
+% end
 
-if ~isempty(dnegIdx)
-    sto = full(pointsModel.S(:, dnegIdx(1)));
-    fprintf('Dev- stoich nonzero count : %d\n', sum(sto~=0));
-end
+% if ~isempty(dposIdx)
+%     sto = full(pointsModel.S(:, dposIdx(1)));
+%     fprintf('Dev+ stoich nonzero count : %d\n', sum(sto~=0));
+% end
+
+% if ~isempty(dnegIdx)
+%     sto = full(pointsModel.S(:, dnegIdx(1)));
+%     fprintf('Dev- stoich nonzero count : %d\n', sum(sto~=0));
+% end
 
 fprintf('\n--- QUICK SOLVER TEST ---\n');
 testSol = optimizeCbModel(pointsModel);
@@ -547,21 +672,21 @@ fprintf('%s LB = %g\n', rxn, lb);
 fprintf('%s UB = %g\n', rxn, ub);
 
 
-if isempty(testSol.f) || isnan(testSol.f)
-    fprintf('Solver returned infeasible solution.\n');
-else
-    fprintf('Objective value : %.6f\n', testSol.f);
+% if isempty(testSol.f) || isnan(testSol.f)
+%     fprintf('Solver returned infeasible solution.\n');
+% else
+%     fprintf('Objective value : %.6f\n', testSol.f);
 
-    if ~isempty(baseIdx)
-        fprintf('Base flux : %s\n', mat2str(testSol.v(baseIdx)));
-    end
-    if ~isempty(dposIdx)
-        fprintf('Dev+ flux : %s\n', mat2str(testSol.v(dposIdx)));
-    end
-    if ~isempty(dnegIdx)
-        fprintf('Dev- flux : %s\n', mat2str(testSol.v(dnegIdx)));
-    end
-end
+%     if ~isempty(baseIdx)
+%         fprintf('Base flux : %s\n', mat2str(testSol.v(baseIdx)));
+%     end
+%     if ~isempty(dposIdx)
+%         fprintf('Dev+ flux : %s\n', mat2str(testSol.v(dposIdx)));
+%     end
+%     if ~isempty(dnegIdx)
+%         fprintf('Dev- flux : %s\n', mat2str(testSol.v(dnegIdx)));
+%     end
+% end
 
 fprintf('\n--- ROI POINTS CHECK ---\n');
 roiPointIdx = find(strcmp(pointsModel.rxns,'Point_EX_roiPoints[roiP]_[P]'));
@@ -574,18 +699,28 @@ end
 fprintf('\n================ DEBUG END ==================\n\n');
 
 
-dietFlux = pointsModelSln.v(foodIdx);
-devFlux  = pointsModelSln.v(devIdx);
+% dietFlux = pointsModelSln.v(foodIdx);
+% devFlux  = pointsModelSln.v(devIdx);
 
-% Compute weighted score ONLY for reporting
-weightedTotalPoints = (Wdev * devFlux) + (Wfood * dietFlux);
+% % Compute weighted score ONLY for reporting
+% weightedTotalPoints = (Wdev * devFlux) + (Wfood * dietFlux);
 
-if strcmp(display,'on')
-    disp(['Weighted Total Points = ', num2str(weightedTotalPoints)]);
-    disp(['Solution points (LP objective) = ', num2str(pointsModelSln.f)]);
-    disp([num2str(dietFlux), ' come from diet']);
-    disp([num2str(devFlux),  ' come from rois']);
-end
+% if strcmp(display,'on')
+%     disp(['Weighted Total Points = ', num2str(weightedTotalPoints)]);
+%     disp(['Solution points (LP objective) = ', num2str(pointsModelSln.f)]);
+%     disp([num2str(dietFlux), ' come from diet']);
+%     disp([num2str(devFlux),  ' come from rois']);
+% end
+
+% pointsModel.c(:) = 0;
+
+% for i = 1:length(rois)
+%     idx = find(strcmp(pointsModel.rxns, rois{i}));
+%     pointsModel.c(idx) = Wdev;
+% end
+
+% foodIdx = find(strcmp(pointsModel.rxns,'Point_EX_unitOfFoodChange[dP]_[P]'));
+% pointsModel.c(foodIdx) = Wfood;
 
 foodAddedIndexes=find(contains(pointsModel.rxns,'Food_Added_EX_'));
 foodRemovedIndexes=find(contains(pointsModel.rxns,'Food_Removed_EX_'));
@@ -663,13 +798,18 @@ end
 if strcmp(display,'on')
     disp('Points Simulation Solution:')
 end
-for i=1:length(rois)
-    ind=find(strcmp(pointsModel.rxns,rois{i}));
-    % if strcmp(display,'on')
-    %     disp(['   ',rois{i},' flux = ', num2str(pointsModelSln.v(ind(1)))])
-    % end
-    roiFlux(i)=pointsModelSln.v(ind(1));
+origRois = rois;
+for i=1:length(origRois)
+    idx = find(strcmp(pointsModel.rxns, origRois{i}));
+    roiFlux(i) = pointsModelSln.v(idx);
 end
+% for i=1:length(rois)
+%     ind=find(strcmp(pointsModel.rxns,rois{i}));
+%     % if strcmp(display,'on')
+%     %     disp(['   ',rois{i},' flux = ', num2str(pointsModelSln.v(ind(1)))])
+%     % end
+%     roiFlux(i)=pointsModelSln.v(ind(1));
+% end
 if strcmp(slnType,'Quick')
     detailedAnalysis=[];
     return
@@ -700,7 +840,7 @@ if model.ub(objIndex) ~= model.lb(objIndex)
     f2 = model_Obj.f;
 
     % Constrain objective to maintain performance
-    newDietModel = changeRxnBounds(newDietModel, obj, f2, 'l');  
+    newDietModel = changeRxnBounds(newDietModel, obj, f2, 'l');
     % use 'b' instead of 'l' if you want to FIX exactly
 
 else
@@ -710,7 +850,7 @@ end
 % Print comparison (only if objective not ROI)
 if ~any(strcmp(obj,rois)==1) && strcmp(display,'on')
     disp(['Original objective max flux = ', num2str(f1), ...
-          '  |  New objective max flux = ', num2str(f2)])
+        '  |  New objective max flux = ', num2str(f2)])
 end
 
 % Restore original objective bounds & sense
