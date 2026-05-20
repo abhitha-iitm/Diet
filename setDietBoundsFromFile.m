@@ -62,7 +62,7 @@ for i = 1:numel(dietMets)
     if ~isempty(idx)
         rxnIdx = exc_rxns_idx(idx);
         model.lb(rxnIdx) = -(fluxValues(i)/(24*10000));
-        matched(i) = true;
+        matched(i) = true;  
     end
 end
 initiallyMatched = sum(matched);

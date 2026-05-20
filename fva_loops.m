@@ -1,34 +1,12 @@
 %% =========================================
-% INITIALIZE COBRA
-%% =========================================
-
-%initCobraToolbox(false);
-%changeCobraSolver('gurobi','LP');
-
-%% =========================================
-% LOAD BASE MODELS
-%% =========================================
-if isempty(gcp('nocreate'))
-    parpool('local');
-end
-
-changeCobraSolverParams('LP','Threads',8);
-
-model_CT = readCbModel('./Multitissue_Models/MulModel_CT.mat');
-model_PC = readCbModel('./Multitissue_Models/MulModel_PC.mat');
-
-model_CT = convert_EX_to_diet(model_CT);
-model_PC = convert_EX_to_diet(model_PC);
-
-%% =========================================
 % DIETS
 %% =========================================
 
 dietFiles = {
-    'EU.tsv'
-    'glutenFree.tsv'
-    'highprotein.tsv'
-    'type2diabetes.tsv'
+    %'EU.tsv'
+    %'glutenFree.tsv'
+    %'highprotein.tsv'
+    %'type2diabetes.tsv'
     'mediterranean.tsv'
     'highfiber.tsv'
     'unhealthy.tsv'
@@ -71,49 +49,6 @@ weights = [
     0.13;0.01;0.11;0.01;0.06;0.07;0.01];
 
 %% =========================================
-% 🔴 BASELINE FVA (NO DIET)
-%% =========================================
-
-fprintf('\n===== BASELINE FVA =====\n');
-
-model_CT_base = model_CT;
-model_PC_base = model_PC;
-
-models = {model_CT_base, model_PC_base};
-
-for m = 1:2
-    models{m}.c(:) = 0;
-
-    for i = 1:length(objRxns)
-        idx = find(strcmp(models{m}.rxns, objRxns{i}));
-        if ~isempty(idx)
-            models{m}.c(idx) = weights(i);
-        end
-    end
-
-    models{m}.osenseStr = 'max';
-end
-
-model_CT_base = models{1};
-model_PC_base = models{2};
-
-[min_CT_base, max_CT_base] = fluxVariability(model_CT_base, 100, 'max', model_CT_base.rxns);
-[min_PC_base, max_PC_base] = fluxVariability(model_PC_base, 100, 'max', model_PC_base.rxns);
-
-[commonRxns_base, idx_CT_b, idx_PC_b] = intersect(model_CT_base.rxns, model_PC_base.rxns, 'stable');
-
-min_CT_base = min_CT_base(idx_CT_b);
-max_CT_base = max_CT_base(idx_CT_b);
-
-min_PC_base = min_PC_base(idx_PC_b);
-max_PC_base = max_PC_base(idx_PC_b);
-
-save(fullfile(saveFolder,'FVA_baseline.mat'), ...
-    'commonRxns_base', ...
-    'min_CT_base','max_CT_base', ...
-    'min_PC_base','max_PC_base');
-
-%% =========================================
 % LOOP OVER DIETS
 %% =========================================
 
@@ -126,12 +61,26 @@ for d = 1:length(dietFiles)
     dietName = erase(dietFiles{d}, '.tsv');
     dietPath = fullfile('Diets', dietFiles{d});
 
-    %% APPLY DIET
+    %% =====================================
+    % 🔴 LOAD CLEAN MODEL EACH TIME (CRITICAL FIX)
+    %% =====================================
+
+    model_CT = readCbModel('./Multitissue_Models/MulModel_CT.mat');
+    model_PC = readCbModel('./Multitissue_Models/MulModel_PC.mat');
+
+    model_CT = convert_EX_to_diet(model_CT);
+    model_PC = convert_EX_to_diet(model_PC);
+
+    %% =====================================
+    % APPLY DIET
+    %% =====================================
 
     [model_CT_diet, ~, ~] = setDietBoundsFromFile(model_CT, dietPath);
     [model_PC_diet, ~, ~] = setDietBoundsFromFile(model_PC, dietPath);
 
-    %% SET OBJECTIVE
+    %% =====================================
+    % SET OBJECTIVE
+    %% =====================================
 
     models = {model_CT_diet, model_PC_diet};
 
@@ -157,16 +106,17 @@ for d = 1:length(dietFiles)
 
     fprintf('Running FVA (diet)...\n');
 
-    [min_CT, max_CT] = fluxVariability(model_CT_diet, 100, 'max', model_CT_diet.rxns);
-    [min_PC, max_PC] = fluxVariability(model_PC_diet, 100, 'max', model_PC_diet.rxns);
+    [min_CT_full, max_CT_full] = fluxVariability(model_CT_diet, 100, 'max', model_CT_diet.rxns);
+    [min_PC_full, max_PC_full] = fluxVariability(model_PC_diet, 100, 'max', model_PC_diet.rxns);
 
+    % ALIGN CT vs PC_diet
     [commonRxns, idx_CT, idx_PC] = intersect(model_CT_diet.rxns, model_PC_diet.rxns, 'stable');
 
-    min_CT = min_CT(idx_CT);
-    max_CT = max_CT(idx_CT);
+    min_CT_aligned = min_CT_full(idx_CT);
+    max_CT_aligned = max_CT_full(idx_CT);
 
-    min_PC = min_PC(idx_PC);
-    max_PC = max_PC(idx_PC);
+    min_PC_aligned = min_PC_full(idx_PC);
+    max_PC_aligned = max_PC_full(idx_PC);
 
     %% =====================================
     % 🔵 LOAD OPTIMIZED MODEL
@@ -195,16 +145,16 @@ for d = 1:length(dietFiles)
 
     fprintf('Running FVA (optimized)...\n');
 
-    [min_PCopt, max_PCopt] = fluxVariability(model_PC_opt, 100, 'max', model_PC_opt.rxns);
+    [min_PCopt_full, max_PCopt_full] = fluxVariability(model_PC_opt, 100, 'max', model_PC_opt.rxns);
 
-    % ALIGN with CT_diet (IMPORTANT)
+    % ALIGN CT vs PC_opt
     [commonRxns_opt, idx_CT2, idx_PCopt] = intersect(model_CT_diet.rxns, model_PC_opt.rxns, 'stable');
 
-    min_CT_opt = min_CT(idx_CT2);
-    max_CT_opt = max_CT(idx_CT2);
+    min_CT_opt = min_CT_full(idx_CT2);
+    max_CT_opt = max_CT_full(idx_CT2);
 
-    min_PCopt = min_PCopt(idx_PCopt);
-    max_PCopt = max_PCopt(idx_PCopt);
+    min_PCopt_aligned = min_PCopt_full(idx_PCopt);
+    max_PCopt_aligned = max_PCopt_full(idx_PCopt);
 
     %% =====================================
     % SAVE
@@ -212,11 +162,62 @@ for d = 1:length(dietFiles)
 
     save(fullfile(saveFolder, ['FVA_' dietName '.mat']), ...
         'commonRxns', ...
-        'min_CT','max_CT','min_PC','max_PC', ...
+        'min_CT_aligned','max_CT_aligned', ...
+        'min_PC_aligned','max_PC_aligned', ...
         'commonRxns_opt', ...
         'min_CT_opt','max_CT_opt', ...
-        'min_PCopt','max_PCopt');
+        'min_PCopt_aligned','max_PCopt_aligned');
+
+    fprintf('Completed: %s\n', dietName);
 
 end
 
 fprintf('\n✅ FINAL FVA COMPLETED SUCCESSFULLY\n');
+%%
+clear; clc;
+
+dietNames = {'High Protein','Type2 Diabetes','Mediterranean','DACH','High Fiber',...
+    'Vegan','Unhealthy','High Fat Low Carb','Gluten Free','Vegetarian','EU'};
+
+before = [42.40,43.24,42.90,42.57,42.40,42.24,44.74,44.41,43.41,41.24,43.41];
+after  = [36.39,37.80,37.73,37.70,37.85,37.90,40.57,40.90,40.40,39.40,42.07];
+
+figure('Color','w','Position',[100 100 1100 480])
+
+barData = [before; after]';
+b = bar(barData,'grouped','BarWidth',0.75);
+
+% Professional colors
+b(1).FaceColor = [0.6 0.6 0.6];   % baseline
+b(2).FaceColor = [0.2 0.45 0.75]; % optimized
+
+% X-axis
+xticks(1:length(dietNames))
+xticklabels(dietNames)
+xtickangle(35)
+
+ylabel('Dysregulation (%)','FontSize',12)
+
+% 🔴 FULL MEANINGFUL LEGEND
+legend({
+    'Baseline disease state (BASE vs PC)', ...
+    'After diet optimization (BASE vs PCOPT)'
+    },...
+    'Location','northoutside',...
+    'Orientation','horizontal',...
+    'Box','off',...
+    'FontSize',10)
+
+% Axis styling
+set(gca,'FontSize',11,'LineWidth',1.2)
+box off
+ylim([34 46])
+
+title('Effect of Dietary Optimization on Metabolic Dysregulation',...
+    'FontWeight','bold','FontSize',13)
+
+% Adjust spacing (prevents overlap)
+ax = gca;
+ax.Position = [0.06 0.18 0.9 0.65];
+
+exportgraphics(gcf,'Figure1_Final.png','Resolution',300)

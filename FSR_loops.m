@@ -53,11 +53,11 @@ for d = 1:length(dietNames)
 
     rxns = string(data.commonRxns(:));
 
-    min_CT = data.min_CT;
-    max_CT = data.max_CT;
+    min_CT = data.min_CT_aligned;
+    max_CT = data.max_CT_aligned;
 
-    min_PC = data.min_PC;
-    max_PC = data.max_PC;
+    min_PC = data.min_PC_aligned;
+    max_PC = data.max_PC_aligned;
 
     %% =====================================
     % CT vs PC_opt (OPTIMIZED)
@@ -68,8 +68,8 @@ for d = 1:length(dietNames)
     min_CT_opt = data.min_CT_opt;
     max_CT_opt = data.max_CT_opt;
 
-    min_PCopt = data.min_PCopt;
-    max_PCopt = data.max_PCopt;
+    min_PCopt = data.min_PCopt_aligned;
+    max_PCopt = data.max_PCopt_aligned;
 
     %% =====================================
     % RUN BOTH COMPARISONS
@@ -92,32 +92,22 @@ for d = 1:length(dietNames)
         fprintf('Running FSR: %s\n', tag)
 
         %% =====================================
-        % FSR CALCULATION (WITH SAFE TOL)
+        % FSR CALCULATION (VECTORISED + SAFE)
         %% =====================================
 
         CT_span = max_normal - min_normal;
         Disease_span = max_disease - min_disease;
 
-        nRxns = length(rxnList);
-        FSR = NaN(nRxns,1);
-
         tol = 1e-9;
 
-        for i = 1:nRxns
-            denom = CT_span(i);
-
-            if abs(denom) > tol
-                FSR(i) = Disease_span(i) / denom;
-            else
-                FSR(i) = NaN;   % safer than 0
-            end
-        end
+        FSR = Disease_span ./ CT_span;
+        FSR(abs(CT_span) <= tol) = NaN;
 
         %% =====================================
         % CLASSIFICATION
         %% =====================================
 
-        Status = repmat("Unchanged", nRxns, 1);
+        Status = repmat("Unchanged", length(FSR), 1);
 
         Status(FSR >= 2) = "Upregulated";
         Status(FSR <= 0.5) = "Downregulated";
@@ -130,7 +120,7 @@ for d = 1:length(dietNames)
         num_down = sum(FSR <= 0.5, 'omitnan');
 
         fprintf('Total: %d | Up: %d | Down: %d\n', ...
-            nRxns, num_up, num_down);
+            length(FSR), num_up, num_down);
 
         %% =====================================
         % TABLE
